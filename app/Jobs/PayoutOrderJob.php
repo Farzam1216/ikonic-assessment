@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Order;
 use App\Services\ApiService;
+use Exception;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -11,6 +12,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 class PayoutOrderJob implements ShouldQueue
 {
@@ -21,9 +23,15 @@ class PayoutOrderJob implements ShouldQueue
      *
      * @return void
      */
+
+    public $order, $apiService;
     public function __construct(
-        public Order $order
-    ) {}
+        Order $order,
+        ApiService $apiService
+    ) {
+        $this->order = $order;
+        $this->apiService = $apiService;
+    }
 
     /**
      * Use the API service to send a payout of the correct amount.
@@ -34,5 +42,13 @@ class PayoutOrderJob implements ShouldQueue
     public function handle(ApiService $apiService)
     {
         // TODO: Complete this method
+        try {
+            DB::transaction(function () {
+                $this->apiService->sendPayout($this->order->affiliate->user->email, $this->order->commission_owed);
+                $this->order->update(['payout_status' => Order::STATUS_PAID]);
+            });
+        } catch (Exception $exception) {
+            throw $exception;
+        }
     }
 }
